@@ -1,0 +1,31 @@
+{
+  "name": "nuxt-tasks-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "@tabler/icons-vue": "^3.19.0",
+    "nuxt": "^3.13.2",
+    "pinia": "^2.2.4",
+    "sass-loader": "^16.0.7",
+    "vue": "^3.5.12",
+    "vue-router": "^4.4.5",
+    "vuetify": "^3.11.8"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "latest",
+    "@pinia/nuxt": "^0.5.5",
+    "sass": "^1.97.3",
+    "typescript": "^5.6.3",
+    "vite-plugin-vuetify": "^2.0.4",
+    "vue-tsc": "^2.1.10"
+  }
+}
