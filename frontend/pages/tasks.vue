@@ -53,6 +53,17 @@
                   <template v-slot:item.createdAt="{ item }">
                     {{ formatDate(item.createdAt) }}
                   </template>
+
+                  <template v-slot:item.actions="{ item }">
+                    <v-btn
+                      icon
+                      size="small"
+                      variant="text"
+                      @click="openEditDialog(item)"
+                    >
+                      <IconEdit :size="20" />
+                    </v-btn>
+                  </template>
                 </v-data-table>
 
                 <v-container
@@ -106,7 +117,8 @@
               label="Title"
               variant="outlined"
               :disabled="creating"
-              :rules="[rules.required]"
+              :rules="[rules.required, rules.maxLength(200)]"
+              counter="200"
               class="mb-3"
             />
 
@@ -149,13 +161,79 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Edit Task Dialog -->
+    <v-dialog v-model="editDialog" max-width="600px" persistent>
+      <v-card>
+        <v-card-title class="text-h5"> Update Task Status </v-card-title>
+
+        <v-card-text>
+          <v-alert
+            v-if="updateError"
+            type="error"
+            variant="tonal"
+            closable
+            class="mb-4"
+            @click:close="updateError = ''"
+          >
+            {{ updateError }}
+          </v-alert>
+
+          <v-form ref="editFormRef">
+            <v-text-field
+              :model-value="editTask.title"
+              label="Title"
+              variant="outlined"
+              disabled
+              class="mb-3"
+            />
+
+            <v-textarea
+              :model-value="editTask.description"
+              label="Description"
+              variant="outlined"
+              disabled
+              rows="3"
+              class="mb-3"
+            />
+
+            <v-select
+              v-model="editTask.status"
+              label="Status"
+              variant="outlined"
+              :items="statusOptions"
+              :disabled="updating"
+              :rules="[rules.required]"
+            />
+          </v-form>
+        </v-card-text>
+
+        <v-card-actions>
+          <v-spacer />
+
+          <v-btn variant="text" @click="closeEditDialog" :disabled="updating">
+            Cancel
+          </v-btn>
+
+          <v-btn
+            color="primary"
+            variant="elevated"
+            @click="handleUpdateTask"
+            :loading="updating"
+            :disabled="!editTask.status"
+          >
+            Update
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-app>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useAuthStore } from "~/stores/auth";
-import { IconPlus, IconClipboardOff } from "@tabler/icons-vue";
+import { IconPlus, IconClipboardOff, IconEdit } from "@tabler/icons-vue";
 
 interface Task {
   id: string;
@@ -168,6 +246,10 @@ interface Task {
 interface CreateTaskPayload {
   title: string;
   description?: string;
+  status: "Pending" | "InProgress" | "Done";
+}
+
+interface UpdateTaskPayload {
   status: "Pending" | "InProgress" | "Done";
 }
 
@@ -196,6 +278,7 @@ const headers = [
   { title: "Title", key: "title", sortable: true },
   { title: "Status", key: "status", sortable: true },
   { title: "Created At", key: "createdAt", sortable: true },
+  { title: "Actions", key: "actions", sortable: false },
 ];
 
 // Create task dialog
@@ -210,6 +293,20 @@ const newTask = ref<CreateTaskPayload>({
   status: "Pending",
 });
 
+// Edit task dialog
+const editDialog = ref(false);
+const updating = ref(false);
+const updateError = ref("");
+const editFormRef = ref();
+
+const editTask = ref<Task>({
+  id: "",
+  title: "",
+  description: "",
+  status: "Pending",
+  createdAt: "",
+});
+
 const statusOptions = [
   { title: "Pending", value: "Pending" },
   { title: "In Progress", value: "InProgress" },
@@ -218,6 +315,8 @@ const statusOptions = [
 
 const rules = {
   required: (value: string) => !!value || "This field is required",
+  maxLength: (max: number) => (value: string) =>
+    !value || value.length <= max || `Maximum ${max} characters allowed`,
 };
 
 // Status color mapping
@@ -250,6 +349,13 @@ const formatDate = (dateString: string) => {
 
 // Handle create task
 const handleCreateTask = async () => {
+  // Validate form
+  const { valid } = await formRef.value.validate();
+  if (!valid) {
+    createError.value = "Please fix the errors in the form";
+    return;
+  }
+
   if (!newTask.value.title || !newTask.value.status) {
     createError.value = "Please fill in all required fields";
     return;
@@ -288,6 +394,67 @@ const closeCreateDialog = () => {
     title: "",
     description: "",
     status: "Pending",
+  };
+  // Reset form validation
+  if (formRef.value) {
+    formRef.value.reset();
+    formRef.value.resetValidation();
+  }
+};
+
+// Open edit dialog
+const openEditDialog = (task: Task) => {
+  editTask.value = { ...task };
+  editDialog.value = true;
+  updateError.value = "";
+};
+
+// Handle update task
+const handleUpdateTask = async () => {
+  if (!editTask.value.status) {
+    updateError.value = "Please select a status";
+    return;
+  }
+
+  updating.value = true;
+  updateError.value = "";
+
+  try {
+    const payload: UpdateTaskPayload = {
+      status: editTask.value.status,
+    };
+
+    const { error: apiError } = await useApi(`/tasks/${editTask.value.id}`, {
+      method: "PATCH",
+      body: payload,
+    });
+
+    if (apiError.value) {
+      throw new Error(apiError.value.message || "Failed to update task");
+    }
+
+    // Refresh tasks list
+    await refresh();
+
+    // Close dialog
+    closeEditDialog();
+  } catch (err: any) {
+    updateError.value = err.message || "Failed to update task";
+  } finally {
+    updating.value = false;
+  }
+};
+
+// Close edit dialog
+const closeEditDialog = () => {
+  editDialog.value = false;
+  updateError.value = "";
+  editTask.value = {
+    id: "",
+    title: "",
+    description: "",
+    status: "Pending",
+    createdAt: "",
   };
 };
 </script>
